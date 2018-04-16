@@ -5,41 +5,47 @@ Created on Wed Mar 28 11:46:11 2018
 @author: spoonertaylor
 
 This file is to answer #2 in STATS 701 HW9
-
+Obtain simple summery stats (sample size, mean and variance).
 """
 from mrjob.job import MRJob
+from mrjob.step import MRStep
 from functools import reduce
+import sys
 
 # Each MR Job makes you make a class that extends MRJob
 class MRWordFrequencyCount(MRJob):
+    # Define the steps we are going to take to run this.
+    def steps(self):
+        return [
+                MRStep(mapper=self.mapper, 
+                       reducer=self.reducer_sums),
+                MRStep(reducer=self.reducer_stats)]
+    
     # Mapper. For each word in the line, yield that word and a count of 1
     def mapper(self, _, line):
         # Split each line
         l = line.split()
+        if len(l) != 2:
+            print(l)
+            sys.exit(1)
         # Label is first
         label = int(l[0])
         # Get value and cast to int
-        value = int(l[1])
-        #yield label, value
-        yield label, (1, value)
+        values = float(l[1])
+        yield label, values
 
     # Value is of type generator.        
-    def reducer(self, label, value):
-        #for v in value:
-        #    print(v[0])
-        N = 0.0
-        s = 0.0
-        s2 = 0.0
-        for v in value:
-            N += v[0]
-            s += v[1]
-            s2 += v[1]*v[1]
-#        N = reduce(lambda x,y: x+1, value, 0.0) # Length of values
-#        s = reduce(lambda x,y: x+y, value, 0.0) # Sum the values together
-#        s2 = reduce(lambda x,y: x+y**2, value, 0.0) # Sum the squared values together
-        m = s/N # Find mean
-        v = s2/N - m**2 # Find variance
-        yield label, (N, m, v)
+    def reducer_sums(self, label, values):
+        # Reduce by making a tuple, first element is N,
+        # Second is summing up the values and third is summing up the squared values
+        v = reduce(lambda x, y: (x[0]+1, x[1]+y, x[2]+y**2), values, (0.0,0.0,0.0))
+        yield (label, v)#(v[0], v[1]/v[0], v[2]/v[0]))
+
+    def reducer_stats(self, label, values):
+        # Our values, v, is now a generator but only of one thing since 
+        # we have already reduced. make it a list.
+        mn_v = reduce(lambda x,y: (y[0], y[1]/y[0], y[2]/y[0]-(y[1]/y[0])**2), values, (0,0,0))
+        yield (label, mn_v)
 
 ### YOU MUST HAVE THESE LINES!!!
 if __name__ == '__main__':
